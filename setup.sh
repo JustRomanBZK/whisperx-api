@@ -23,17 +23,23 @@ if command -v docker &>/dev/null; then
 else
     echo "[*] Installing Docker..."
     curl -fsSL https://get.docker.com | sh
+fi
+
+# Ensure current user is in docker group
+if ! groups "$USER" | grep -q '\bdocker\b'; then
+    echo "[*] Adding $USER to docker group..."
     sudo usermod -aG docker "$USER"
-    echo "[*] Docker installed. You may need to re-login for group changes."
+    echo "[*] Re-executing script with docker group..."
+    exec sg docker "$0"
 fi
 
 # --- 3. NVIDIA Container Toolkit ---
-if dpkg -l | grep -q nvidia-container-toolkit; then
-    echo "[OK] NVIDIA Container Toolkit already installed"
+if docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
+    echo "[OK] NVIDIA Container Toolkit already working"
 else
     echo "[*] Installing NVIDIA Container Toolkit..."
     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-        sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        sudo gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
         sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
         sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
@@ -41,19 +47,18 @@ else
     sudo apt-get install -y nvidia-container-toolkit
     sudo nvidia-ctk runtime configure --runtime=docker
     sudo systemctl restart docker
-    echo "[OK] NVIDIA Container Toolkit installed"
+    sleep 2
+
+    echo "[*] Verifying GPU access in Docker..."
+    if docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi; then
+        echo "[OK] Docker can access GPU"
+    else
+        echo "[!] Docker cannot access GPU. Check NVIDIA drivers and Container Toolkit."
+        exit 1
+    fi
 fi
 
-# --- 4. Verify GPU in Docker ---
-echo "[*] Verifying GPU access in Docker..."
-if docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi &>/dev/null; then
-    echo "[OK] Docker can access GPU"
-else
-    echo "[!] Docker cannot access GPU. Check NVIDIA drivers and Container Toolkit."
-    exit 1
-fi
-
-# --- 5. Setup .env ---
+# --- 4. Setup .env ---
 if [ ! -f .env ]; then
     cp .env.example .env
     echo ""
@@ -69,7 +74,7 @@ else
     echo "[OK] .env exists"
 fi
 
-# --- 6. Build & Start ---
+# --- 5. Build & Start ---
 echo "[*] Building and starting WhisperX API..."
 docker compose up -d --build
 
