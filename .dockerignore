@@ -1,0 +1,14 @@
+.idea
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+build
+dist
+.venv
+venv
+env
+.mypy_cache
+.pytest_cache
+.ruff_cache
