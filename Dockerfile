@@ -1,9 +1,16 @@
 FROM ghcr.io/jim60105/whisperx:no_model
 
+USER root
 WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
-RUN python -m ensurepip --upgrade && python -m pip install --no-cache-dir -r /app/requirements.txt
+COPY patches/ /app/patches/
+
+RUN python -m ensurepip --upgrade \
+    && python -m pip install --no-cache-dir -r /app/requirements.txt \
+    && python -m pip install --no-cache-dir --upgrade whisperx \
+    && python -m pip install --no-cache-dir --upgrade "pyannote-audio>=4.0.3" \
+    && python /app/patches/patch_pyannote4.py
 
 COPY app/ /app/app/
 COPY main.py /app/main.py
